@@ -23,9 +23,11 @@ import           Data.Bifunctor             (bimap, first)
 import           Data.Either                (partitionEithers)
 import           Data.List.NonEmpty         (NonEmpty (..))
 import qualified Data.List.NonEmpty         as NEL
-import qualified Data.Map                   as Map
+import qualified Data.Map                   as M
 import           Data.Maybe                 (fromMaybe)
-import           Data.Set                   as S
+import           Data.Monoid                (Monoid, mempty)
+import           Data.Semigroup             (Semigroup, (<>))
+import qualified Data.Set                   as S
 import           Kafka.Internal.RdKafka
 import           Kafka.Internal.Setup
 import           Kafka.Types
