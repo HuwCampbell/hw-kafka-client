@@ -43,6 +43,7 @@ data KafkaAdmin = KafkaAdmin
   { acKafka     :: !Kafka
   , acKafkaConf :: !KafkaConf
   }
+
 instance HasKafka KafkaAdmin where
   getKafka = acKafka
 
@@ -55,8 +56,8 @@ data NewTopic = NewTopic
 
 {-# DEPRECATED newKafkaAdmin "Do we even need a special KafkaAdmin now when all the functions accept HasKafka?" #-}
 newKafkaAdmin :: (MonadIO m)
-               => AdminProperties
-               -> m (Either KafkaError KafkaAdmin)
+              => AdminProperties
+              -> m (Either KafkaError KafkaAdmin)
 newKafkaAdmin props = liftIO $ do
   kc@(KafkaConf kc' _ _) <- kafkaConf (KafkaProps (apKafkaProps props))
   mbKafka <- newRdKafkaT RdKafkaConsumer kc'
@@ -69,7 +70,7 @@ closeKafkaAdmin k = void $ rdKafkaConsumerClose (getRdKafka k)
 
 ----------------------------- CREATE ------------------------------------------
 
-createTopics :: (HasKafka k)
+createTopics :: HasKafka k
              => k
              -> [NewTopic]
              -> IO [Either (KafkaError, String) TopicName]
@@ -100,7 +101,7 @@ mkNewTopicUnsafe NewTopic{..} = runExceptT $ do
 
 ----------------------------- DELETE ------------------------------------------
 
-deleteTopics :: (HasKafka k)
+deleteTopics :: HasKafka k
              => k
              -> [TopicName]
              -> IO [Either (TopicName, KafkaError, String) TopicName]
@@ -110,7 +111,7 @@ deleteTopics client ts =
     rdKafkaDeleteTopics kafkaPtr topics opts queue
     waitForAllResponses ts rdKafkaEventDeleteTopicsResult rdKafkaDeleteTopicsResultTopics queue
 
--------------------- Hepler servicing functions
+-------------------- Helper servicing functions
 
 withAdminOperation :: HasKafka k
                    => k
@@ -147,7 +148,7 @@ whileRight :: Monad m
 whileRight f as = runExceptT $ traverse_ (ExceptT . f) as
 
 
--- ^ Polls the provided queue until it hets all the responses
+-- ^ Polls the provided queue until it gets all the responses
 -- from all the specified topics
 waitForAllResponses :: [TopicName]
                     -> (RdKafkaEventTPtr -> IO (Maybe a))
@@ -171,4 +172,3 @@ waitForAllResponses ts fromEvent toResults q =
 
     getTopicName = either (\(t,_,_) -> t) id
     wrapTopicName = bimap (\(t,e,s) -> (TopicName . T.pack $ t, KafkaResponseError e, s)) (TopicName . T.pack)
-

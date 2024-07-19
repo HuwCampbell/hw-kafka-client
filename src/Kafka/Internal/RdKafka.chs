@@ -18,7 +18,7 @@ import Foreign.Storable (Storable(..))
 import Foreign.Ptr (Ptr, FunPtr, castPtr, nullPtr)
 import Foreign.ForeignPtr (ForeignPtr, FinalizerPtr, addForeignPtrFinalizer, newForeignPtr_, withForeignPtr)
 import Foreign.C.Error (Errno(..), getErrno)
-import Foreign.C.String (CString, newCString, withCAString, peekCAString, peekCString)
+import Foreign.C.String (CString, newCString, withCAString, withCString, peekCAString, peekCString)
 import Foreign.C.Types (CFile, CInt(..), CSize, CChar, CLong)
 import System.IO (Handle, stdin, stdout, stderr)
 import System.Posix.IO (handleToFd)
@@ -580,6 +580,19 @@ rdKafkaConsumeBatchQueue qptr timeout batchSize = do
     rSize <- rdKafkaConsumeBatchQueue' qptr timeout pArr (fromIntegral batchSize)
     peekArray (fromIntegral rSize) pArr >>= traverse (flip newForeignPtr (return ()))
 
+{#fun rd_kafka_queue_poll as rdKafkaQueuePoll'
+    {`RdKafkaQueueTPtr', `Int'} -> `RdKafkaEventTPtr' #}
+
+rdKafkaQueuePoll :: RdKafkaQueueTPtr -> Int -> IO (Maybe RdKafkaEventTPtr)
+rdKafkaQueuePoll q t = do
+    ret <- rdKafkaQueuePoll' q t
+    withForeignPtr ret $ \realPtr ->
+        if realPtr == nullPtr then return Nothing
+        else do
+            addForeignPtrFinalizer rdKafkaEventDestroyF ret
+            return $ Just ret
+
+
 -------------------------------------------------------------------------------------------------
 ---- High-level KafkaConsumer
 
@@ -653,6 +666,18 @@ rdKafkaAssignment k = do
 {#fun rd_kafka_position as ^
     {`RdKafkaTPtr', `RdKafkaTopicPartitionListTPtr'}
     -> `RdKafkaRespErrT' cIntToEnum #}
+
+-- {#fun rd_kafka_position as rdKafkaPosition'
+--     {`RdKafkaTPtr', alloca- `Ptr RdKafkaTopicPartitionListT' peekPtr* }
+--     -> `RdKafkaRespErrT' cIntToEnum #}
+-- rdKafkaPosition :: RdKafkaTPtr -> IO (Either RdKafkaRespErrT RdKafkaTopicPartitionListTPtr)
+-- rdKafkaPosition k = do
+--     (err, ass) <- rdKafkaPosition' k
+--     case err of
+--         RdKafkaRespErrNoError ->
+--             Right <$> newForeignPtr ass (rdKafkaTopicPartitionListDestroy ass)
+--         e -> return (Left e)
+
 
 -------------------------------------------------------------------------------------------------
 ---- Groups
@@ -1257,14 +1282,14 @@ data RdKafkaDeleteTopicT
 data RdKafkaDeleteTopicsResultT
 {#pointer *rd_kafka_DeleteTopics_result_t as RdKafkaDeleteTopicsResultTPtr foreign -> RdKafkaDeleteTopicsResultT #}
 
-foreign import ccall unsafe "rdkafka.h &rd_kafka_DeleteTopic_destroy"
-    rdKafkaDeleteTopicDestroy :: FinalizerPtr RdKafkaDeleteTopicT
+foreign import ccall unsafe "rdkafka.h rd_kafka_DeleteTopic_destroy"
+    rdKafkaDeleteTopicDestroy :: Ptr RdKafkaDeleteTopicT -> IO ()
 
 newRdKafkaDeleteTopic :: String -> IO RdKafkaDeleteTopicTPtr
 newRdKafkaDeleteTopic str =
   withCString str $ \strPtr -> do
     res <- {#call rd_kafka_DeleteTopic_new#} strPtr
-    newForeignPtr rdKafkaDeleteTopicDestroy res
+    newForeignPtr res (rdKafkaDeleteTopicDestroy res)
 
 rdKafkaDeleteTopics :: RdKafkaTPtr
                     -> [RdKafkaDeleteTopicTPtr]
